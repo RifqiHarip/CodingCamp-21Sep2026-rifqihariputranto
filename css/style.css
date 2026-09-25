@@ -107,6 +107,27 @@ ol {
 
   /* --- Transition --- */
   --transition-fast: 150ms ease;
+
+  /* --- Dark mode transition --- */
+  --transition-theme: background-color 200ms ease, color 200ms ease,
+                      border-color 200ms ease, box-shadow 200ms ease;
+}
+
+/* ==========================================================================
+   2b. Dark Theme — applied via [data-theme="dark"] on <html>
+   ========================================================================== */
+
+[data-theme="dark"] {
+  --color-text:           #e8eaed;
+  --color-text-muted:     #9aa0a6;
+  --color-bg:             #1e1e2e;
+  --color-surface:        #2a2a3e;
+  --color-border:         #3f3f5a;
+  --color-accent:         #7cacf8;
+  --color-accent-hover:   #a8c7fa;
+  --color-error:          #f28b82;
+  --color-warning-bg:     #3a2e00;
+  --color-warning-border: #f29900;
 }
 
 /* ==========================================================================
@@ -178,6 +199,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  transition: var(--transition-theme);
 }
 
 /* ---- Header ---- */
@@ -197,6 +219,40 @@ header {
   font-weight: 600;
   color: var(--color-accent);
   white-space: nowrap;
+}
+
+/* ---- Theme toggle button ---- */
+#theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+#theme-toggle:hover {
+  background-color: var(--color-surface);
+  border-color: var(--color-accent);
+}
+
+#theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 111, 164, 0.35);
+}
+
+[data-theme="dark"] #theme-toggle:focus-visible {
+  box-shadow: 0 0 0 3px rgba(124, 172, 248, 0.35);
 }
 
 /* ---- Main content area ---- */
@@ -365,6 +421,14 @@ label {
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.2);
 }
 
+/* Dark mode form inputs */
+[data-theme="dark"] #transaction-form input,
+[data-theme="dark"] #transaction-form select {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
 /* ---- Submit button ---- */
 #transaction-form button[type="submit"] {
   align-self: flex-start;
@@ -438,6 +502,90 @@ label {
 /* ==========================================================================
    8. Transaction List (Requirements 2.3, 2.4)
    ========================================================================== */
+
+/* ---- Sort controls row ---- */
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.sort-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.sort-controls select {
+  flex: 1;
+  min-width: 7rem;
+  max-width: 12rem;
+  padding: 0.3rem var(--space-sm);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.sort-controls select:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(29, 111, 164, 0.25);
+}
+
+[data-theme="dark"] .sort-controls select {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-sort-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text);
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast),
+              color var(--transition-fast);
+}
+
+.btn-sort-dir:hover {
+  background-color: var(--color-surface);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.btn-sort-dir:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 111, 164, 0.3);
+}
+
+.btn-sort-dir[data-dir="desc"] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background-color: rgba(29, 111, 164, 0.07);
+}
+
+[data-theme="dark"] .btn-sort-dir[data-dir="desc"] {
+  background-color: rgba(124, 172, 248, 0.12);
+}
 
 /*
  * Scrollable list container
@@ -556,14 +704,13 @@ label {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;                /* 32px — meets minimum touch target guidance */
-  height: 2rem;
-  padding: 0;
-  font-size: 1rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1;
-  color: var(--color-error);
-  background-color: transparent;
-  border: 1px solid transparent;
+  color: #ffffff;
+  background-color: #c0392b;
+  border: 1px solid #c0392b;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--transition-fast),
@@ -571,13 +718,59 @@ label {
 }
 
 .btn-delete:hover {
-  background-color: rgba(192, 57, 43, 0.08);
-  border-color: var(--color-error);
+  background-color: #a93226;
+  border-color: #a93226;
 }
 
 .btn-delete:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.3);
+}
+
+[data-theme="dark"] .btn-delete {
+  background-color: #922b21;
+  border-color: #922b21;
+}
+
+[data-theme="dark"] .btn-delete:hover {
+  background-color: #7b241c;
+  border-color: #7b241c;
+}
+
+/* ---- Add-category inline row ---- */
+.add-category-row {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.add-category-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+#btn-add-category {
+  flex-shrink: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+#btn-add-category:hover {
+  background-color: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+#btn-add-category:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 111, 164, 0.3);
 }
 
 /* --------------------------------------------------------------------------
@@ -707,4 +900,7 @@ label {
   #pie-chart {
     max-width: 260px;         /* three-column layout — keep chart compact */
   }
+}
+[hidden] {
+  display: none !important;
 }

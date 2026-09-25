@@ -9,12 +9,29 @@
   /** @type {string} localStorage key used for persistence */
   var STORAGE_KEY = 'transactions';
 
-  /** @type {string[]} Valid category values */
+  /** @type {string} localStorage key for persisted categories */
+  var CATEGORIES_STORAGE_KEY = 'categories';
+
+  /** @type {string} localStorage key for theme preference */
+  var THEME_STORAGE_KEY = 'theme';
+
+  /** @type {string[]} Valid category values — loaded from storage, mutable */
   var VALID_CATEGORIES = ['Food', 'Transport', 'Fun'];
 
   /**
+   * Palette of pre-assigned colors for built-in and new categories.
+   * New categories cycle through this palette.
+   */
+  var COLOR_PALETTE = [
+    '#E63946', '#457B9D', '#2A9D8F',
+    '#F4A261', '#6A4C93', '#2EC4B6',
+    '#E9C46A', '#264653', '#F77F00',
+    '#A8DADC', '#8338EC', '#FB5607',
+  ];
+
+  /**
    * Hex color assigned to each category for the pie chart.
-   * All three values are visually distinct and meet WCAG 4.5:1 contrast on white.
+   * Populated from storage on init; new categories get the next palette color.
    * @type {Object.<string, string>}
    */
   var CATEGORY_COLORS = {
@@ -32,6 +49,12 @@
 
   /** @type {Chart|null} Holds the active Chart.js instance so it can be destroyed before re-creation */
   var chartInstance = null;
+
+  /** @type {'date'|'amount'|'category'} Current sort field */
+  var sortField = 'date';
+
+  /** @type {'asc'|'desc'} Current sort direction */
+  var sortDirection = 'asc';
 
   // ---------------------------------------------------------------------------
   // Utility: Warning Banner
@@ -169,6 +192,75 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Category persistence helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Loads persisted categories from localStorage.
+   * Falls back to the built-in defaults if nothing is stored or storage fails.
+   */
+  function loadCategoriesFromStorage() {
+    try {
+      var raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        !Array.isArray(parsed.categories) ||
+        typeof parsed.colors !== 'object'
+      ) return;
+      // Merge: keep built-ins, add any user-defined ones
+      parsed.categories.forEach(function (cat) {
+        if (typeof cat === 'string' && cat.length > 0 && !VALID_CATEGORIES.includes(cat)) {
+          VALID_CATEGORIES.push(cat);
+        }
+      });
+      Object.keys(parsed.colors).forEach(function (cat) {
+        if (typeof parsed.colors[cat] === 'string') {
+          CATEGORY_COLORS[cat] = parsed.colors[cat];
+        }
+      });
+    } catch (e) {
+      // Silently ignore — built-in defaults remain in place
+    }
+  }
+
+  /**
+   * Saves the current categories and colors to localStorage.
+   */
+  function saveCategoriesToStorage() {
+    try {
+      localStorage.setItem(
+        CATEGORIES_STORAGE_KEY,
+        JSON.stringify({ categories: VALID_CATEGORIES, colors: CATEGORY_COLORS })
+      );
+    } catch (e) {
+      // Silently ignore storage errors for categories
+    }
+  }
+
+  /**
+   * Rebuilds the #category <select> options from the current VALID_CATEGORIES array.
+   */
+  function refreshCategorySelect() {
+    var select = document.getElementById('category');
+    if (!select) return;
+    var currentValue = select.value;
+    select.innerHTML = '<option value="">-- Select Category --</option>';
+    VALID_CATEGORIES.forEach(function (cat) {
+      var opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      select.appendChild(opt);
+    });
+    // Restore selection if it still exists
+    if (VALID_CATEGORIES.includes(currentValue)) {
+      select.value = currentValue;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Stubs for functions implemented in subsequent tasks
   // ---------------------------------------------------------------------------
 
@@ -289,7 +381,7 @@
   function buildChartConfig(totals) { // eslint-disable-line no-unused-vars
     var labels = Object.keys(totals);
     var data   = labels.map(function (label) { return totals[label]; });
-    var colors = labels.map(function (label) { return CATEGORY_COLORS[label]; });
+    var colors = labels.map(function (label) { return CATEGORY_COLORS[label] || '#999999'; });
 
     return {
       type: 'pie',
@@ -335,6 +427,42 @@
   }
 
   /**
+   * Returns a sorted copy of the transaction list according to the current
+   * sortField and sortDirection state.
+   *
+   * Sort rules:
+   *   date     — by createdAt (numeric)
+   *   amount   — by amount (numeric)
+   *   category — by category string (locale-aware alphabetical)
+   *
+   * Ties in any field are broken by createdAt ascending so the order is stable.
+   *
+   * @param {Transaction[]} list
+   * @returns {Transaction[]}
+   */
+  function sortTransactions(list) {
+    return list.slice().sort(function (a, b) {
+      var result = 0;
+
+      if (sortField === 'amount') {
+        result = a.amount - b.amount;
+      } else if (sortField === 'category') {
+        result = a.category.localeCompare(b.category);
+      } else {
+        // default: date
+        result = a.createdAt - b.createdAt;
+      }
+
+      // Tie-break by createdAt for stability
+      if (result === 0) {
+        result = a.createdAt - b.createdAt;
+      }
+
+      return sortDirection === 'desc' ? -result : result;
+    });
+  }
+
+  /**
    * Clears and rebuilds the #transaction-list <ul>.
    *
    * - If `list` is empty, renders a single empty-state <li> message (Req 2.4).
@@ -360,10 +488,8 @@
       return;
     }
 
-    // --- Req 2.2: render in chronological order (oldest first via createdAt) ---
-    var sorted = list.slice().sort(function (a, b) {
-      return a.createdAt - b.createdAt;
-    });
+    // --- Req 2.2: render in sort order (controlled by sortField/sortDirection) ---
+    var sorted = sortTransactions(list);
 
     sorted.forEach(function (transaction) {
       // --- Req 2.1: show name, amount (2 d.p.), category, and delete button ---
@@ -577,6 +703,101 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Sort controls
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Wires up the sort-field <select> and sort-direction toggle button.
+   * Changes immediately re-render the transaction list.
+   */
+  function initSortControls() {
+    var fieldSelect  = document.getElementById('sort-field');
+    var dirBtn       = document.getElementById('sort-direction');
+    if (!fieldSelect || !dirBtn) return;
+
+    function updateDirBtn() {
+      if (sortDirection === 'asc') {
+        dirBtn.textContent = '↑';
+        dirBtn.setAttribute('aria-label', 'Sort ascending — click to sort descending');
+        dirBtn.setAttribute('data-dir', 'asc');
+      } else {
+        dirBtn.textContent = '↓';
+        dirBtn.setAttribute('aria-label', 'Sort descending — click to sort ascending');
+        dirBtn.setAttribute('data-dir', 'desc');
+      }
+    }
+
+    // Initialise button state
+    updateDirBtn();
+
+    fieldSelect.addEventListener('change', function () {
+      sortField = fieldSelect.value;
+      renderTransactionList(transactions);
+    });
+
+    dirBtn.addEventListener('click', function () {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      updateDirBtn();
+      renderTransactionList(transactions);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Theme toggle
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialises the dark/light mode toggle.
+   *
+   * Priority order for initial theme:
+   *   1. User's saved preference in localStorage
+   *   2. OS/browser prefers-color-scheme setting
+   *   3. Default: light
+   *
+   * Persists changes to localStorage["theme"].
+   */
+  function initTheme() {
+    var html = document.documentElement;
+    var btn  = document.getElementById('theme-toggle');
+    if (!btn) return;
+
+    // Determine starting theme
+    var saved = null;
+    try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { /* ignore */ }
+
+    var prefersDark = (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+    );
+
+    var isDark = saved === 'dark' || (saved === null && prefersDark);
+
+    function applyTheme(dark) {
+      if (dark) {
+        html.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️';
+        btn.setAttribute('aria-label', 'Switch to light mode');
+      } else {
+        html.removeAttribute('data-theme');
+        btn.textContent = '🌙';
+        btn.setAttribute('aria-label', 'Switch to dark mode');
+      }
+    }
+
+    applyTheme(isDark);
+
+    btn.addEventListener('click', function () {
+      var currentlyDark = html.getAttribute('data-theme') === 'dark';
+      var next = !currentlyDark;
+      applyTheme(next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next ? 'dark' : 'light');
+      } catch (e) { /* ignore */ }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // App entry point
   // ---------------------------------------------------------------------------
 
@@ -590,9 +811,14 @@
    * 3. Attach a delegated click listener on #transaction-list for delete buttons (Req 2.5).
    */
   function initApp() {
+    initTheme();
     // --- Req 5.3: restore persisted transactions and render initial UI ---
     transactions = loadFromStorage();
+    // Load persisted categories before rendering
+    loadCategoriesFromStorage();
+    refreshCategorySelect();
     renderAll(transactions);
+    initSortControls();
 
     // --- Req 1.6: form submit handler with validation ---
     var form = document.getElementById('transaction-form');
@@ -669,6 +895,65 @@
         }
       });
     }
+
+    // --- Add-category handler ---
+    var btnAddCategory = document.getElementById('btn-add-category');
+    var newCategoryInput = document.getElementById('new-category');
+    var errorNewCategory = document.getElementById('error-new-category');
+
+    if (btnAddCategory && newCategoryInput) {
+      btnAddCategory.addEventListener('click', function () {
+        var raw = newCategoryInput.value.trim();
+
+        // Clear previous error
+        if (errorNewCategory) {
+          errorNewCategory.textContent = '';
+          errorNewCategory.style.display = 'none';
+        }
+
+        if (!raw || raw.length === 0) {
+          if (errorNewCategory) {
+            errorNewCategory.textContent = 'Please enter a category name.';
+            errorNewCategory.style.display = 'block';
+          }
+          return;
+        }
+
+        if (raw.length > 30) {
+          if (errorNewCategory) {
+            errorNewCategory.textContent = 'Category name must be 30 characters or fewer.';
+            errorNewCategory.style.display = 'block';
+          }
+          return;
+        }
+
+        // Case-insensitive duplicate check
+        var duplicate = VALID_CATEGORIES.some(function (cat) {
+          return cat.toLowerCase() === raw.toLowerCase();
+        });
+        if (duplicate) {
+          if (errorNewCategory) {
+            errorNewCategory.textContent = 'That category already exists.';
+            errorNewCategory.style.display = 'block';
+          }
+          return;
+        }
+
+        // Assign next palette color
+        var colorIndex = VALID_CATEGORIES.length % COLOR_PALETTE.length;
+        CATEGORY_COLORS[raw] = COLOR_PALETTE[colorIndex];
+        VALID_CATEGORIES.push(raw);
+
+        saveCategoriesToStorage();
+        refreshCategorySelect();
+
+        // Auto-select the new category
+        var select = document.getElementById('category');
+        if (select) select.value = raw;
+
+        newCategoryInput.value = '';
+      });
+    }
   }
 
   // Only register the DOM event listener when running in a browser environment
@@ -701,9 +986,23 @@
       STORAGE_KEY: STORAGE_KEY,
       VALID_CATEGORIES: VALID_CATEGORIES,
       CATEGORY_COLORS: CATEGORY_COLORS,
+      loadCategoriesFromStorage: loadCategoriesFromStorage,
+      saveCategoriesToStorage: saveCategoriesToStorage,
+      refreshCategorySelect: refreshCategorySelect,
+      COLOR_PALETTE: COLOR_PALETTE,
+      CATEGORIES_STORAGE_KEY: CATEGORIES_STORAGE_KEY,
+      initTheme: initTheme,
+      THEME_STORAGE_KEY: THEME_STORAGE_KEY,
       // Expose internal state getter for testing
       getTransactions: function () { return transactions; },
       setTransactions: function (list) { transactions = list; },
+      sortTransactions: sortTransactions,
+      initSortControls: initSortControls,
+      // Expose sort state for testing
+      getSortField: function () { return sortField; },
+      getSortDirection: function () { return sortDirection; },
+      setSortField: function (v) { sortField = v; },
+      setSortDirection: function (v) { sortDirection = v; },
     };
   }
 })();

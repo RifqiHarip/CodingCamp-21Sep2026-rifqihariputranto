@@ -10,6 +10,12 @@
     <header>
       <h1>Expense Tracker</h1>
       <div id="balance-display">Total: $0.00</div>
+      <button
+        id="theme-toggle"
+        type="button"
+        aria-label="Switch to dark mode"
+        title="Toggle dark/light mode"
+      >🌙</button>
     </header>
 
     <main>
@@ -51,6 +57,19 @@
               <option value="Fun">Fun</option>
             </select>
             <span id="error-category" class="error" role="alert"></span>
+            <div class="add-category-row">
+              <input
+                type="text"
+                id="new-category"
+                name="new-category"
+                maxlength="30"
+                placeholder="New category name"
+                autocomplete="off"
+                aria-label="New category name"
+              />
+              <button type="button" id="btn-add-category">+ Add</button>
+            </div>
+            <span id="error-new-category" class="error" role="alert"></span>
           </div>
 
           <button type="submit">Add Transaction</button>
@@ -59,6 +78,21 @@
 
       <section id="list-section">
         <h2>Transactions</h2>
+        <div class="sort-controls" role="group" aria-label="Sort transactions">
+          <label for="sort-field" class="sort-label">Sort by</label>
+          <select id="sort-field" aria-label="Sort field">
+            <option value="date">Date</option>
+            <option value="amount">Amount</option>
+            <option value="category">Category</option>
+          </select>
+          <button
+            type="button"
+            id="sort-direction"
+            aria-label="Sort ascending"
+            title="Toggle sort direction"
+            class="btn-sort-dir"
+          >↑</button>
+        </div>
         <ul id="transaction-list" aria-label="Transaction list"></ul>
       </section>
 
